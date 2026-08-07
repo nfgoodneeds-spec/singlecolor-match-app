@@ -132,7 +132,11 @@ with tab1:
             except UnicodeDecodeError:
                 df = pd.read_csv(uploaded_file, encoding='shift_jis')
                 
-            if 'std_D65_2_L' in df.columns:
+            # HEXとLab値の取得ロジック（複数パターンの列名に対応）
+            std_hex, std_L, std_a, std_b = "", 0, 0, 0
+            sam_hex, sam_L, sam_a, sam_b = "", 0, 0, 0
+
+            if 'std_D65_2_hex' in df.columns:
                 std_hex = str(df['std_D65_2_hex'].iloc[0]).strip()
                 std_L = float(df['std_D65_2_L'].iloc[0])
                 std_a = float(df['std_D65_2_a'].iloc[0])
@@ -146,17 +150,16 @@ with tab1:
                 std_L = float(df['standard-D65-2deg-L'].iloc[0])
                 std_a = float(df['standard-D65-2deg-a'].iloc[0])
                 std_b = float(df['standard-D65-2deg-b'].iloc[0])
-                
                 try:
-                    sam_hex = str(df['sample-D65-2deg-b.1'].iloc[0]).strip()
-                    sam_L = float(df['sample-D65-2deg-mode'].iloc[0])
-                    sam_a = float(df['sample-D65-2deg-L'].iloc[0])
-                    sam_b = float(df['sample-D65-2deg-a'].iloc[0])
-                except:
                     sam_hex = str(df['sample-D65-2deg-hex'].iloc[0]).strip()
                     sam_L = float(df['sample-D65-2deg-L'].iloc[0])
                     sam_a = float(df['sample-D65-2deg-a'].iloc[0])
                     sam_b = float(df['sample-D65-2deg-b'].iloc[0])
+                except KeyError:
+                    sam_hex = str(df['sample-D65-2deg-b.1'].iloc[0]).strip()
+                    sam_L = float(df['sample-D65-2deg-mode'].iloc[0])
+                    sam_a = float(df['sample-D65-2deg-L'].iloc[0])
+                    sam_b = float(df['sample-D65-2deg-a'].iloc[0])
             else:
                 st.error("CSVからHEXデータが見つかりません。")
                 st.stop()
