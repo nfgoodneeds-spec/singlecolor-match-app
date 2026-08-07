@@ -98,7 +98,8 @@ def display_recipe(drops):
 
 # --- Tab1: Color Muse (CSV) ---
 with tab1:
-    uploaded_file = st.file_uploader("Color Muse の CSVファイル をアップロード", type=['csv'])
+    # ★ Androidでも選択できるようにファイル形式の制限を解除しています
+    uploaded_file = st.file_uploader("Color Muse の CSVファイル をアップロード")
     
     if uploaded_file is not None:
         try:
@@ -142,7 +143,7 @@ with tab1:
             display_recipe(drops)
             
         except Exception as e:
-            st.error(f"エラーが発生しました: {e}")
+            st.error(f"エラーが発生しました: ファイルの形式を確認してください。")
 
 # --- Tab2: 単色作成 ---
 with tab2:
