@@ -23,23 +23,22 @@ with st.sidebar:
     
     st.divider()
     st.markdown("### 単色作成用 (RGB手動入力)")
-    manual_r = st.number_input("R (0-255)", min_value=0, max_value=255, value=0, step=1)
-    manual_g = st.number_input("G (0-255)", min_value=0, max_value=255, value=0, step=1)
-    manual_b = st.number_input("B (0-255)", min_value=0, max_value=255, value=0, step=1)
+    manual_r = st.number_input("R (0-255)", min_value=0, max_value=255, value=200, step=1)
+    manual_g = st.number_input("G (0-255)", min_value=0, max_value=255, value=200, step=1)
+    manual_b = st.number_input("B (0-255)", min_value=0, max_value=255, value=200, step=1)
     
     manual_color_hex = f"#{manual_r:02x}{manual_g:02x}{manual_b:02x}"
     st.markdown(f'<div style="background-color: {manual_color_hex}; height: 50px; border-radius: 5px; border: 1px solid #ccc;"></div>', unsafe_allow_html=True)
 
 # --- メインエリア ---
-# タブを3つに増やしました
-tab1, tab2, tab3 = st.tabs(["Color Muse (CSV読込)", "単色作成 (手動入力)", "調合シミュレーター"])
+# タブを4つに増やしました
+tab1, tab2, tab3, tab4 = st.tabs(["Color Muse (CSV読込)", "単色作成", "調合シミュレーター", "2色差分補正"])
 
 # --- 関数: レシピ計算（ゼロから色を作るロジック） ---
 def calculate_recipe_single(r, g, b, ints, kw, kb):
     c = 255 - r
     m = 255 - g
     y = 255 - b
-    
     k = min(c, m, y)
     
     if k == 255:
@@ -53,7 +52,6 @@ def calculate_recipe_single(r, g, b, ints, kw, kb):
     base_red = m / 255.0
     base_yellow = y / 255.0
     base_black = k / 255.0
-    
     luminance = (r + g + b) / 3.0
     base_white = luminance / 255.0
 
@@ -64,11 +62,57 @@ def calculate_recipe_single(r, g, b, ints, kw, kb):
     drops["青"] = math.ceil(base_blue * MAX_DROPS * ints)
     drops["黄"] = math.ceil(base_yellow * MAX_DROPS * ints)
     drops["黒"] = math.ceil(base_black * MAX_DROPS * ints * kb)
-    
     if base_white > 0.1:
          drops["白"] = math.ceil(base_white * MAX_DROPS * kw)
     if luminance < 50:
         drops["白"] = 0
+
+    return drops
+
+# --- 関数: レシピ計算（2色の差分を補正するロジック） ---
+def calculate_recipe_diff_rgb(curr_r, curr_g, curr_b, tgt_r, tgt_g, tgt_b, ints, kw, kb):
+    # 現在の色をCMYK化
+    cc, cm, cy = 255 - curr_r, 255 - curr_g, 255 - curr_b
+    ck = min(cc, cm, cy)
+    if ck != 255:
+        cc, cm, cy = (cc - ck) / (255 - ck) * 255, (cm - ck) / (255 - ck) * 255, (cy - ck) / (255 - ck) * 255
+    else:
+        cc = cm = cy = 0
+
+    # 目標の色をCMYK化
+    tc, tm, ty = 255 - tgt_r, 255 - tgt_g, 255 - tgt_b
+    tk = min(tc, tm, ty)
+    if tk != 255:
+        tc, tm, ty = (tc - tk) / (255 - tk) * 255, (tm - tk) / (255 - tk) * 255, (ty - tk) / (255 - tk) * 255
+    else:
+        tc = tm = ty = 0
+
+    # 差分を計算（足りない分だけを抽出）
+    dc = max(0, tc - cc)
+    dm = max(0, tm - cm)
+    dy = max(0, ty - cy)
+    dk = max(0, tk - ck)
+
+    base_blue = dc / 255.0
+    base_red = dm / 255.0
+    base_yellow = dy / 255.0
+    base_black = dk / 255.0
+
+    # 明度の差分を計算（目標の方が明るい場合のみ白を追加）
+    curr_lum = (curr_r + curr_g + curr_b) / 3.0
+    tgt_lum = (tgt_r + tgt_g + tgt_b) / 3.0
+    diff_lum = max(0, tgt_lum - curr_lum)
+    base_white = diff_lum / 255.0
+
+    drops = {"赤": 0, "青": 0, "黄": 0, "黒": 0, "白": 0}
+    MAX_DROPS = 30.0
+
+    drops["赤"] = math.ceil(base_red * MAX_DROPS * ints)
+    drops["青"] = math.ceil(base_blue * MAX_DROPS * ints)
+    drops["黄"] = math.ceil(base_yellow * MAX_DROPS * ints)
+    drops["黒"] = math.ceil(base_black * MAX_DROPS * ints * kb)
+    if base_white > 0.05:
+        drops["白"] = math.ceil(base_white * MAX_DROPS * kw)
 
     return drops
 
@@ -94,7 +138,6 @@ def display_recipe(drops):
 # --- Tab1: Color Muse (CSV) ---
 with tab1:
     uploaded_file = st.file_uploader("Color Muse の CSVファイル をアップロード")
-    
     if uploaded_file is not None:
         try:
             try:
@@ -126,12 +169,10 @@ with tab1:
             st.markdown("#### 目標色 (Standard)")
             st.markdown(f'<div style="background-color: {std_hex}; height: 100px; width: 50%; border-radius: 10px; margin-bottom: 10px; border: 1px solid #ccc;"></div>', unsafe_allow_html=True)
             st.write(f"R: {r}  |  G: {g}  |  B: {b}")
-                
             st.divider()
             
             drops = calculate_recipe_single(r, g, b, intensity, k_white, k_black)
             display_recipe(drops)
-            
         except Exception as e:
             st.error(f"エラーが発生しました: ファイルの形式を確認してください。")
 
@@ -143,26 +184,20 @@ with tab2:
         f'<div style="background-color: {manual_color_hex}; height: 100px; width: 50%; border-radius: 10px; margin-bottom: 20px; border: 1px solid #ccc;"></div>', 
         unsafe_allow_html=True
     )
-    
     drops_single = calculate_recipe_single(manual_r, manual_g, manual_b, intensity, k_white, k_black)
     display_recipe(drops_single)
 
 # --- Tab3: 調合シミュレーター ---
 with tab3:
     st.markdown("### 滴数から色をシミュレーション")
-    st.markdown("AIレシピを参考に、滴数を増減させた場合の色味の変化を予測します。")
-    
     col1, col2 = st.columns([1, 1])
-    
     with col1:
         sim_r = st.number_input("🔴 赤 (滴)", min_value=0, max_value=500, value=0, step=1)
         sim_b = st.number_input("🔵 青 (滴)", min_value=0, max_value=500, value=0, step=1)
         sim_y = st.number_input("🟡 黄 (滴)", min_value=0, max_value=500, value=0, step=1)
         sim_k = st.number_input("⚫ 黒 (滴)", min_value=0, max_value=500, value=0, step=1)
         sim_w = st.number_input("⚪ 白 (滴)", min_value=0, max_value=500, value=0, step=1)
-        
     with col2:
-        # 滴数から色（RGB）を逆算する数学モデル
         c_rate = 1.0 - math.exp(-sim_b * 0.05)
         m_rate = 1.0 - math.exp(-sim_r * 0.05)
         y_rate = 1.0 - math.exp(-sim_y * 0.05)
@@ -172,7 +207,6 @@ with tab3:
         calc_g = 255 * (1 - m_rate) * (1 - k_rate)
         calc_b = 255 * (1 - y_rate) * (1 - k_rate)
         
-        # 白の隠蔽力（明るくする効果）を追加
         w_rate = 1.0 - math.exp(-sim_w * 0.05)
         calc_r = calc_r + (255 - calc_r) * w_rate
         calc_g = calc_g + (255 - calc_g) * w_rate
@@ -181,7 +215,6 @@ with tab3:
         final_r = int(max(0, min(255, calc_r)))
         final_g = int(max(0, min(255, calc_g)))
         final_b = int(max(0, min(255, calc_b)))
-        
         sim_hex = f"#{final_r:02x}{final_g:02x}{final_b:02x}"
         
         st.markdown("#### 予測される混色")
@@ -190,3 +223,29 @@ with tab3:
             unsafe_allow_html=True
         )
         st.write(f"予測 RGB: R:{final_r} G:{final_g} B:{final_b}")
+
+# --- Tab4: 2色差分補正 ---
+with tab4:
+    st.markdown("### 今の色から目標色へ近づける補正レシピ")
+    st.markdown("「現在の色」に何を足せば「目標の色」になるかを計算します。※引き算（色を抜くこと）はできないため、不足している染料のみを算出します。")
+    
+    col_c, col_t = st.columns(2)
+    with col_c:
+        st.markdown("#### 現在の色 (色抜け部)")
+        curr_r = st.number_input("現在 R", min_value=0, max_value=255, value=200, step=1, key="cr")
+        curr_g = st.number_input("現在 G", min_value=0, max_value=255, value=200, step=1, key="cg")
+        curr_b = st.number_input("現在 B", min_value=0, max_value=255, value=200, step=1, key="cb")
+        curr_hex = f"#{curr_r:02x}{curr_g:02x}{curr_b:02x}"
+        st.markdown(f'<div style="background-color: {curr_hex}; height: 80px; width: 100%; border-radius: 10px; border: 1px solid #ccc;"></div>', unsafe_allow_html=True)
+
+    with col_t:
+        st.markdown("#### 目標の色 (基準色)")
+        tgt_r = st.number_input("目標 R", min_value=0, max_value=255, value=150, step=1, key="tr")
+        tgt_g = st.number_input("目標 G", min_value=0, max_value=255, value=150, step=1, key="tg")
+        tgt_b = st.number_input("目標 B", min_value=0, max_value=255, value=150, step=1, key="tb")
+        tgt_hex = f"#{tgt_r:02x}{tgt_g:02x}{tgt_b:02x}"
+        st.markdown(f'<div style="background-color: {tgt_hex}; height: 80px; width: 100%; border-radius: 10px; border: 1px solid #ccc;"></div>', unsafe_allow_html=True)
+
+    st.divider()
+    diff_drops = calculate_recipe_diff_rgb(curr_r, curr_g, curr_b, tgt_r, tgt_g, tgt_b, intensity, k_white, k_black)
+    display_recipe(diff_drops)
