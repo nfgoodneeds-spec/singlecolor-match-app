@@ -31,7 +31,6 @@ with st.sidebar:
     st.markdown(f'<div style="background-color: {manual_color_hex}; height: 50px; border-radius: 5px; border: 1px solid #ccc;"></div>', unsafe_allow_html=True)
 
 # --- メインエリア ---
-# タブを4つに増やしました
 tab1, tab2, tab3, tab4 = st.tabs(["Color Muse (CSV読込)", "単色作成", "調合シミュレーター", "2色差分補正"])
 
 # --- 関数: レシピ計算（ゼロから色を作るロジック） ---
@@ -71,7 +70,6 @@ def calculate_recipe_single(r, g, b, ints, kw, kb):
 
 # --- 関数: レシピ計算（2色の差分を補正するロジック） ---
 def calculate_recipe_diff_rgb(curr_r, curr_g, curr_b, tgt_r, tgt_g, tgt_b, ints, kw, kb):
-    # 現在の色をCMYK化
     cc, cm, cy = 255 - curr_r, 255 - curr_g, 255 - curr_b
     ck = min(cc, cm, cy)
     if ck != 255:
@@ -79,7 +77,6 @@ def calculate_recipe_diff_rgb(curr_r, curr_g, curr_b, tgt_r, tgt_g, tgt_b, ints,
     else:
         cc = cm = cy = 0
 
-    # 目標の色をCMYK化
     tc, tm, ty = 255 - tgt_r, 255 - tgt_g, 255 - tgt_b
     tk = min(tc, tm, ty)
     if tk != 255:
@@ -87,7 +84,6 @@ def calculate_recipe_diff_rgb(curr_r, curr_g, curr_b, tgt_r, tgt_g, tgt_b, ints,
     else:
         tc = tm = ty = 0
 
-    # 差分を計算（足りない分だけを抽出）
     dc = max(0, tc - cc)
     dm = max(0, tm - cm)
     dy = max(0, ty - cy)
@@ -98,7 +94,6 @@ def calculate_recipe_diff_rgb(curr_r, curr_g, curr_b, tgt_r, tgt_g, tgt_b, ints,
     base_yellow = dy / 255.0
     base_black = dk / 255.0
 
-    # 明度の差分を計算（目標の方が明るい場合のみ白を追加）
     curr_lum = (curr_r + curr_g + curr_b) / 3.0
     tgt_lum = (tgt_r + tgt_g + tgt_b) / 3.0
     diff_lum = max(0, tgt_lum - curr_lum)
@@ -137,7 +132,7 @@ def display_recipe(drops):
 
 # --- Tab1: Color Muse (CSV) ---
 with tab1:
-    uploaded_file = st.file_uploader("Color Muse の CSVファイル をアップロード")
+    uploaded_file = st.file_uploader("Color Muse の CSVファイル をアップロード", key="tab1_csv")
     if uploaded_file is not None:
         try:
             try:
@@ -229,20 +224,74 @@ with tab4:
     st.markdown("### 今の色から目標色へ近づける補正レシピ")
     st.markdown("「現在の色」に何を足せば「目標の色」になるかを計算します。※引き算（色を抜くこと）はできないため、不足している染料のみを算出します。")
     
+    # 差分補正専用のCSVアップローダー
+    diff_csv = st.file_uploader("Color Muse の CSVファイル をアップロード (2色補正用)", key="tab4_csv")
+    
+    is_csv_loaded = False
+    curr_r, curr_g, curr_b = 200, 200, 200
+    tgt_r, tgt_g, tgt_b = 150, 150, 150
+    
+    if diff_csv is not None:
+        try:
+            try:
+                df = pd.read_csv(diff_csv, encoding='utf-8')
+            except UnicodeDecodeError:
+                df = pd.read_csv(diff_csv, encoding='shift_jis')
+                
+            if 'std_D65_2_hex' in df.columns:
+                std_hex = str(df['std_D65_2_hex'].iloc[0]).strip()
+                smp_hex = str(df['smp_D65_2_hex'].iloc[0]).strip()
+            elif 'standard-D65-2deg-hex' in df.columns:
+                std_hex = str(df['standard-D65-2deg-hex'].iloc[0]).strip()
+                try:
+                    smp_hex = str(df['sample-D65-2deg-hex'].iloc[0]).strip()
+                except KeyError:
+                    smp_hex = str(df['sample-D65-2deg-b.1'].iloc[0]).strip()
+            else:
+                st.error("CSVからHEXデータが見つかりません。")
+                st.stop()
+
+            if not std_hex.startswith('#'): std_hex = '#' + std_hex
+            if not smp_hex.startswith('#'): smp_hex = '#' + smp_hex
+
+            tgt_r, tgt_g, tgt_b = int(std_hex[1:3], 16), int(std_hex[3:5], 16), int(std_hex[5:7], 16)
+            curr_r, curr_g, curr_b = int(smp_hex[1:3], 16), int(smp_hex[3:5], 16), int(smp_hex[5:7], 16)
+            
+            is_csv_loaded = True
+            st.success("CSVから「現在の色(Sample)」と「目標の色(Standard)」を読み込みました！")
+        except Exception as e:
+            st.error("エラーが発生しました。ファイル形式を確認してください。")
+
     col_c, col_t = st.columns(2)
-    with col_c:
-        st.markdown("#### 現在の色 (色抜け部)")
-        curr_r = st.number_input("現在 R", min_value=0, max_value=255, value=200, step=1, key="cr")
-        curr_g = st.number_input("現在 G", min_value=0, max_value=255, value=200, step=1, key="cg")
-        curr_b = st.number_input("現在 B", min_value=0, max_value=255, value=200, step=1, key="cb")
+    
+    if not is_csv_loaded:
+        # 手動入力モード
+        st.info("CSVをアップロードするか、以下の数値を手動で変更してください。")
+        with col_c:
+            st.markdown("#### 現在の色 (色抜け部)")
+            curr_r = st.number_input("現在 R", min_value=0, max_value=255, value=200, step=1, key="cr")
+            curr_g = st.number_input("現在 G", min_value=0, max_value=255, value=200, step=1, key="cg")
+            curr_b = st.number_input("現在 B", min_value=0, max_value=255, value=200, step=1, key="cb")
+        with col_t:
+            st.markdown("#### 目標の色 (基準色)")
+            tgt_r = st.number_input("目標 R", min_value=0, max_value=255, value=150, step=1, key="tr")
+            tgt_g = st.number_input("目標 G", min_value=0, max_value=255, value=150, step=1, key="tg")
+            tgt_b = st.number_input("目標 B", min_value=0, max_value=255, value=150, step=1, key="tb")
+    else:
+        # CSVデータ表示モード
+        with col_c:
+            st.markdown("#### 現在の色 (Sample)")
+            st.write(f"R: {curr_r}  |  G: {curr_g}  |  B: {curr_b}")
+        with col_t:
+            st.markdown("#### 目標の色 (Standard)")
+            st.write(f"R: {tgt_r}  |  G: {tgt_g}  |  B: {tgt_b}")
+
+    # 色のプレビューとレシピ計算結果を表示
+    col_c2, col_t2 = st.columns(2)
+    with col_c2:
         curr_hex = f"#{curr_r:02x}{curr_g:02x}{curr_b:02x}"
         st.markdown(f'<div style="background-color: {curr_hex}; height: 80px; width: 100%; border-radius: 10px; border: 1px solid #ccc;"></div>', unsafe_allow_html=True)
-
-    with col_t:
-        st.markdown("#### 目標の色 (基準色)")
-        tgt_r = st.number_input("目標 R", min_value=0, max_value=255, value=150, step=1, key="tr")
-        tgt_g = st.number_input("目標 G", min_value=0, max_value=255, value=150, step=1, key="tg")
-        tgt_b = st.number_input("目標 B", min_value=0, max_value=255, value=150, step=1, key="tb")
+    with col_t2:
         tgt_hex = f"#{tgt_r:02x}{tgt_g:02x}{tgt_b:02x}"
         st.markdown(f'<div style="background-color: {tgt_hex}; height: 80px; width: 100%; border-radius: 10px; border: 1px solid #ccc;"></div>', unsafe_allow_html=True)
 
