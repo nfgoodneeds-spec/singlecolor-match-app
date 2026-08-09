@@ -28,7 +28,7 @@ with st.sidebar:
     manual_b = st.number_input("B (0-255)", min_value=0, max_value=255, value=0, step=1)
     
     manual_color_hex = f"#{manual_r:02x}{manual_g:02x}{manual_b:02x}"
-    st.markdown(f'<div style="background-color: {manual_color_hex}; height: 50px; border-radius: 5px;"></div>', unsafe_allow_html=True)
+    st.markdown(f'<div style="background-color: {manual_color_hex}; height: 50px; border-radius: 5px; border: 1px solid #ccc;"></div>', unsafe_allow_html=True)
 
 # --- メインエリア ---
 tab1, tab2 = st.tabs(["Color Muse (CSV読込)", "単色作成 (手動入力)"])
@@ -98,7 +98,7 @@ def display_recipe(drops):
 
 # --- Tab1: Color Muse (CSV) ---
 with tab1:
-    # ★ Androidでも選択できるようにファイル形式の制限を解除しています
+    # Androidでも選択できるようにファイル形式の制限を解除
     uploaded_file = st.file_uploader("Color Muse の CSVファイル をアップロード")
     
     if uploaded_file is not None:
@@ -132,7 +132,7 @@ with tab1:
                 st.stop()
             
             st.markdown("#### 目標色 (Standard)")
-            st.markdown(f'<div style="background-color: {std_hex}; height: 100px; width: 50%; border-radius: 10px; margin-bottom: 10px;"></div>', unsafe_allow_html=True)
+            st.markdown(f'<div style="background-color: {std_hex}; height: 100px; width: 50%; border-radius: 10px; margin-bottom: 10px; border: 1px solid #ccc;"></div>', unsafe_allow_html=True)
             st.write(f"R: {r}  |  G: {g}  |  B: {b}")
             st.write(f"HEX: {std_hex}")
                 
@@ -148,7 +148,13 @@ with tab1:
 # --- Tab2: 単色作成 ---
 with tab2:
     st.markdown("### 指定したRGBからレシピを算出")
+    
+    # 選択中のRGB値と、実際の色を表示するブロックを追加
     st.markdown(f"現在選択中の色: **R:{manual_r} G:{manual_g} B:{manual_b}**")
+    st.markdown(
+        f'<div style="background-color: {manual_color_hex}; height: 100px; width: 50%; border-radius: 10px; margin-bottom: 20px; border: 1px solid #ccc;"></div>', 
+        unsafe_allow_html=True
+    )
     
     drops_single = calculate_recipe_single(manual_r, manual_g, manual_b, intensity, k_white, k_black)
     display_recipe(drops_single)
