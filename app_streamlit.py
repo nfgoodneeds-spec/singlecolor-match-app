@@ -140,17 +140,18 @@ with tab1:
             except UnicodeDecodeError:
                 df = pd.read_csv(uploaded_file, encoding='shift_jis')
                 
-            std_hex = ""
-            if 'std_D65_2_hex' in df.columns:
-                std_hex = str(df['std_D65_2_hex'].iloc[0]).strip()
-            elif 'standard-D65-2deg-hex' in df.columns:
-                std_hex = str(df['standard-D65-2deg-hex'].iloc[0]).strip()
-            else:
-                st.error("CSVからHEXデータが見つかりません。")
+            std_hex = None
+            # ズレ対策：周辺の列も探しに行く強靭なロジック
+            for col in ['std_D65_2_hex', 'standard-D65-2deg-hex', 'std_D65_2_b.1', 'standard-D65-2deg-b.1']:
+                if col in df.columns:
+                    val = str(df[col].iloc[0]).strip()
+                    if val.startswith('#'):
+                        std_hex = val
+                        break
+                        
+            if not std_hex:
+                st.error("CSVから目標色のHEXデータが見つかりません。")
                 st.stop()
-                
-            if not std_hex.startswith('#'): 
-                std_hex = '#' + std_hex
             
             hex_val = std_hex.lstrip('#')
             if len(hex_val) == 6:
@@ -169,7 +170,7 @@ with tab1:
             drops = calculate_recipe_single(r, g, b, intensity, k_white, k_black)
             display_recipe(drops)
         except Exception as e:
-            st.error(f"エラーが発生しました: ファイルの形式を確認してください。")
+            st.error("エラーが発生しました: ファイルの形式を確認してください。")
 
 # --- Tab2: 単色作成 ---
 with tab2:
@@ -224,7 +225,6 @@ with tab4:
     st.markdown("### 今の色から目標色へ近づける補正レシピ")
     st.markdown("「現在の色」に何を足せば「目標の色」になるかを計算します。※引き算（色を抜くこと）はできないため、不足している染料のみを算出します。")
     
-    # 差分補正専用のCSVアップローダー
     diff_csv = st.file_uploader("Color Muse の CSVファイル をアップロード (2色補正用)", key="tab4_csv")
     
     is_csv_loaded = False
@@ -238,21 +238,26 @@ with tab4:
             except UnicodeDecodeError:
                 df = pd.read_csv(diff_csv, encoding='shift_jis')
                 
-            if 'std_D65_2_hex' in df.columns:
-                std_hex = str(df['std_D65_2_hex'].iloc[0]).strip()
-                smp_hex = str(df['smp_D65_2_hex'].iloc[0]).strip()
-            elif 'standard-D65-2deg-hex' in df.columns:
-                std_hex = str(df['standard-D65-2deg-hex'].iloc[0]).strip()
-                try:
-                    smp_hex = str(df['sample-D65-2deg-hex'].iloc[0]).strip()
-                except KeyError:
-                    smp_hex = str(df['sample-D65-2deg-b.1'].iloc[0]).strip()
-            else:
-                st.error("CSVからHEXデータが見つかりません。")
-                st.stop()
+            std_hex, smp_hex = None, None
+            
+            # ズレ対策：周辺の列も探しに行く強靭なロジック
+            for col in ['std_D65_2_hex', 'standard-D65-2deg-hex', 'std_D65_2_b.1', 'standard-D65-2deg-b.1']:
+                if col in df.columns:
+                    val = str(df[col].iloc[0]).strip()
+                    if val.startswith('#'):
+                        std_hex = val
+                        break
+                        
+            for col in ['smp_D65_2_hex', 'sample-D65-2deg-hex', 'smp_D65_2_b.1', 'sample-D65-2deg-b.1']:
+                if col in df.columns:
+                    val = str(df[col].iloc[0]).strip()
+                    if val.startswith('#'):
+                        smp_hex = val
+                        break
 
-            if not std_hex.startswith('#'): std_hex = '#' + std_hex
-            if not smp_hex.startswith('#'): smp_hex = '#' + smp_hex
+            if not std_hex or not smp_hex:
+                st.error("CSVから目標色または現在の色のHEXデータが見つかりません。")
+                st.stop()
 
             tgt_r, tgt_g, tgt_b = int(std_hex[1:3], 16), int(std_hex[3:5], 16), int(std_hex[5:7], 16)
             curr_r, curr_g, curr_b = int(smp_hex[1:3], 16), int(smp_hex[3:5], 16), int(smp_hex[5:7], 16)
@@ -265,7 +270,6 @@ with tab4:
     col_c, col_t = st.columns(2)
     
     if not is_csv_loaded:
-        # 手動入力モード
         st.info("CSVをアップロードするか、以下の数値を手動で変更してください。")
         with col_c:
             st.markdown("#### 現在の色 (色抜け部)")
@@ -278,7 +282,6 @@ with tab4:
             tgt_g = st.number_input("目標 G", min_value=0, max_value=255, value=150, step=1, key="tg")
             tgt_b = st.number_input("目標 B", min_value=0, max_value=255, value=150, step=1, key="tb")
     else:
-        # CSVデータ表示モード
         with col_c:
             st.markdown("#### 現在の色 (Sample)")
             st.write(f"R: {curr_r}  |  G: {curr_g}  |  B: {curr_b}")
@@ -286,7 +289,6 @@ with tab4:
             st.markdown("#### 目標の色 (Standard)")
             st.write(f"R: {tgt_r}  |  G: {tgt_g}  |  B: {tgt_b}")
 
-    # 色のプレビューとレシピ計算結果を表示
     col_c2, col_t2 = st.columns(2)
     with col_c2:
         curr_hex = f"#{curr_r:02x}{curr_g:02x}{curr_b:02x}"
