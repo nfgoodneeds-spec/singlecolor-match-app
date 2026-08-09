@@ -31,19 +31,17 @@ with st.sidebar:
     st.markdown(f'<div style="background-color: {manual_color_hex}; height: 50px; border-radius: 5px; border: 1px solid #ccc;"></div>', unsafe_allow_html=True)
 
 # --- メインエリア ---
-tab1, tab2 = st.tabs(["Color Muse (CSV読込)", "単色作成 (手動入力)"])
+# タブを3つに増やしました
+tab1, tab2, tab3 = st.tabs(["Color Muse (CSV読込)", "単色作成 (手動入力)", "調合シミュレーター"])
 
 # --- 関数: レシピ計算（ゼロから色を作るロジック） ---
 def calculate_recipe_single(r, g, b, ints, kw, kb):
-    # RGBからCMYへの簡易変換（減法混色の近似）
     c = 255 - r
     m = 255 - g
     y = 255 - b
     
-    # CMYからK（黒）を抽出
     k = min(c, m, y)
     
-    # 黒成分を引いて純粋なCMYを算出
     if k == 255:
         c = m = y = 0
     else:
@@ -51,25 +49,22 @@ def calculate_recipe_single(r, g, b, ints, kw, kb):
         m = (m - k) / (255 - k) * 255
         y = (y - k) / (255 - k) * 255
         
-    # アプリの染料（赤、青、黄）にマッピング
     base_blue = c / 255.0
     base_red = m / 255.0
     base_yellow = y / 255.0
     base_black = k / 255.0
     
-    # 明度（白の必要性）の算出
     luminance = (r + g + b) / 3.0
     base_white = luminance / 255.0
 
     drops = {"赤": 0, "青": 0, "黄": 0, "黒": 0, "白": 0}
-    MAX_DROPS = 30.0  # 基準ドロップ数
+    MAX_DROPS = 30.0
     
     drops["赤"] = math.ceil(base_red * MAX_DROPS * ints)
     drops["青"] = math.ceil(base_blue * MAX_DROPS * ints)
     drops["黄"] = math.ceil(base_yellow * MAX_DROPS * ints)
     drops["黒"] = math.ceil(base_black * MAX_DROPS * ints * kb)
     
-    # 色が薄い（白っぽい）場合は白を足す
     if base_white > 0.1:
          drops["白"] = math.ceil(base_white * MAX_DROPS * kw)
     if luminance < 50:
@@ -98,7 +93,6 @@ def display_recipe(drops):
 
 # --- Tab1: Color Muse (CSV) ---
 with tab1:
-    # Androidでも選択できるようにファイル形式の制限を解除
     uploaded_file = st.file_uploader("Color Muse の CSVファイル をアップロード")
     
     if uploaded_file is not None:
@@ -108,7 +102,6 @@ with tab1:
             except UnicodeDecodeError:
                 df = pd.read_csv(uploaded_file, encoding='shift_jis')
                 
-            # HEXコードの取得ロジック
             std_hex = ""
             if 'std_D65_2_hex' in df.columns:
                 std_hex = str(df['std_D65_2_hex'].iloc[0]).strip()
@@ -121,7 +114,6 @@ with tab1:
             if not std_hex.startswith('#'): 
                 std_hex = '#' + std_hex
             
-            # HEXからRGBに変換
             hex_val = std_hex.lstrip('#')
             if len(hex_val) == 6:
                 r = int(hex_val[0:2], 16)
@@ -134,11 +126,9 @@ with tab1:
             st.markdown("#### 目標色 (Standard)")
             st.markdown(f'<div style="background-color: {std_hex}; height: 100px; width: 50%; border-radius: 10px; margin-bottom: 10px; border: 1px solid #ccc;"></div>', unsafe_allow_html=True)
             st.write(f"R: {r}  |  G: {g}  |  B: {b}")
-            st.write(f"HEX: {std_hex}")
                 
             st.divider()
             
-            # ゼロから作るレシピを計算
             drops = calculate_recipe_single(r, g, b, intensity, k_white, k_black)
             display_recipe(drops)
             
@@ -148,8 +138,6 @@ with tab1:
 # --- Tab2: 単色作成 ---
 with tab2:
     st.markdown("### 指定したRGBからレシピを算出")
-    
-    # 選択中のRGB値と、実際の色を表示するブロックを追加
     st.markdown(f"現在選択中の色: **R:{manual_r} G:{manual_g} B:{manual_b}**")
     st.markdown(
         f'<div style="background-color: {manual_color_hex}; height: 100px; width: 50%; border-radius: 10px; margin-bottom: 20px; border: 1px solid #ccc;"></div>', 
@@ -158,3 +146,47 @@ with tab2:
     
     drops_single = calculate_recipe_single(manual_r, manual_g, manual_b, intensity, k_white, k_black)
     display_recipe(drops_single)
+
+# --- Tab3: 調合シミュレーター ---
+with tab3:
+    st.markdown("### 滴数から色をシミュレーション")
+    st.markdown("AIレシピを参考に、滴数を増減させた場合の色味の変化を予測します。")
+    
+    col1, col2 = st.columns([1, 1])
+    
+    with col1:
+        sim_r = st.number_input("🔴 赤 (滴)", min_value=0, max_value=500, value=0, step=1)
+        sim_b = st.number_input("🔵 青 (滴)", min_value=0, max_value=500, value=0, step=1)
+        sim_y = st.number_input("🟡 黄 (滴)", min_value=0, max_value=500, value=0, step=1)
+        sim_k = st.number_input("⚫ 黒 (滴)", min_value=0, max_value=500, value=0, step=1)
+        sim_w = st.number_input("⚪ 白 (滴)", min_value=0, max_value=500, value=0, step=1)
+        
+    with col2:
+        # 滴数から色（RGB）を逆算する数学モデル
+        c_rate = 1.0 - math.exp(-sim_b * 0.05)
+        m_rate = 1.0 - math.exp(-sim_r * 0.05)
+        y_rate = 1.0 - math.exp(-sim_y * 0.05)
+        k_rate = 1.0 - math.exp(-sim_k * 0.05)
+        
+        calc_r = 255 * (1 - c_rate) * (1 - k_rate)
+        calc_g = 255 * (1 - m_rate) * (1 - k_rate)
+        calc_b = 255 * (1 - y_rate) * (1 - k_rate)
+        
+        # 白の隠蔽力（明るくする効果）を追加
+        w_rate = 1.0 - math.exp(-sim_w * 0.05)
+        calc_r = calc_r + (255 - calc_r) * w_rate
+        calc_g = calc_g + (255 - calc_g) * w_rate
+        calc_b = calc_b + (255 - calc_b) * w_rate
+        
+        final_r = int(max(0, min(255, calc_r)))
+        final_g = int(max(0, min(255, calc_g)))
+        final_b = int(max(0, min(255, calc_b)))
+        
+        sim_hex = f"#{final_r:02x}{final_g:02x}{final_b:02x}"
+        
+        st.markdown("#### 予測される混色")
+        st.markdown(
+            f'<div style="background-color: {sim_hex}; height: 150px; width: 100%; border-radius: 10px; border: 1px solid #ccc; margin-top: 10px;"></div>', 
+            unsafe_allow_html=True
+        )
+        st.write(f"予測 RGB: R:{final_r} G:{final_g} B:{final_b}")
