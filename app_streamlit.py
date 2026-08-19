@@ -10,7 +10,7 @@ st.set_page_config(
 )
 
 st.title("AI Color Matching System")
-st.markdown("Color MuseのCSVデータを読み込み、目標色をゼロから調合するためのレシピを算出します。")
+st.markdown("CSVデータを読み込み、目標色をゼロから調合するためのレシピを算出します。")
 
 # --- UIレイアウト: サイドバー（チューニング） ---
 with st.sidebar:
@@ -31,7 +31,7 @@ with st.sidebar:
     st.markdown(f'<div style="background-color: {manual_color_hex}; height: 50px; border-radius: 5px; border: 1px solid #ccc;"></div>', unsafe_allow_html=True)
 
 # --- メインエリア ---
-tab1, tab2, tab3, tab4 = st.tabs(["Color Muse (CSV読込)", "単色作成", "調合シミュレーター", "2色差分補正"])
+tab1, tab2, tab3, tab4 = st.tabs(["CSV読込 (基準色)", "単色作成", "調合シミュレーター", "2色差分補正"])
 
 # --- 関数: レシピ計算（ゼロから色を作るロジック） ---
 def calculate_recipe_single(r, g, b, ints, kw, kb):
@@ -130,9 +130,9 @@ def display_recipe(drops):
             unsafe_allow_html=True
         )
 
-# --- Tab1: Color Muse (CSV) ---
+# --- Tab1: CSV読込 (基準色) ---
 with tab1:
-    uploaded_file = st.file_uploader("Color Muse の CSVファイル をアップロード", key="tab1_csv")
+    uploaded_file = st.file_uploader("カラースキャナーの CSVファイル をアップロード", key="tab1_csv")
     if uploaded_file is not None:
         try:
             try:
@@ -141,12 +141,17 @@ with tab1:
                 df = pd.read_csv(uploaded_file, encoding='shift_jis')
                 
             std_hex = None
-            # ズレ対策：周辺の列も探しに行く強靭なロジック
-            for col in ['std_D65_2_hex', 'standard-D65-2deg-hex', 'std_D65_2_b.1', 'standard-D65-2deg-b.1']:
+            is_new_scanner = False
+            
+            # ズレ対策＆新旧フォーマット両対応ロジック
+            # 'D65_2_hex' が新しいスキャナー用データ
+            for col in ['std_D65_2_hex', 'standard-D65-2deg-hex', 'D65_2_hex', 'std_D65_2_b.1', 'standard-D65-2deg-b.1']:
                 if col in df.columns:
                     val = str(df[col].iloc[0]).strip()
                     if val.startswith('#'):
                         std_hex = val
+                        if col == 'D65_2_hex':
+                            is_new_scanner = True
                         break
                         
             if not std_hex:
@@ -164,13 +169,25 @@ with tab1:
             
             st.markdown("#### 目標色 (Standard)")
             st.markdown(f'<div style="background-color: {std_hex}; height: 100px; width: 50%; border-radius: 10px; margin-bottom: 10px; border: 1px solid #ccc;"></div>', unsafe_allow_html=True)
-            st.write(f"R: {r}  |  G: {g}  |  B: {b}")
+            
+            # 高精度データのL*a*b*表示を追加
+            if is_new_scanner and 'D65_2_L' in df.columns:
+                st.success("✨ 高精度スキャンデータを読み込みました！")
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.write(f"**RGB**: R: {r} | G: {g} | B: {b}")
+                with col2:
+                    st.write(f"**L*a*b***: L*: {df['D65_2_L'].iloc[0]:.2f} | a*: {df['D65_2_a'].iloc[0]:.2f} | b*: {df['D65_2_b'].iloc[0]:.2f}")
+            else:
+                st.write(f"R: {r}  |  G: {g}  |  B: {b}")
+                
             st.divider()
             
             drops = calculate_recipe_single(r, g, b, intensity, k_white, k_black)
             display_recipe(drops)
+            
         except Exception as e:
-            st.error("エラーが発生しました: ファイルの形式を確認してください。")
+            st.error(f"エラーが発生しました: ファイルの形式を確認してください。詳細: {e}")
 
 # --- Tab2: 単色作成 ---
 with tab2:
@@ -225,7 +242,7 @@ with tab4:
     st.markdown("### 今の色から目標色へ近づける補正レシピ")
     st.markdown("「現在の色」に何を足せば「目標の色」になるかを計算します。※引き算（色を抜くこと）はできないため、不足している染料のみを算出します。")
     
-    diff_csv = st.file_uploader("Color Muse の CSVファイル をアップロード (2色補正用)", key="tab4_csv")
+    diff_csv = st.file_uploader("CSVファイル をアップロード (2色補正用)", key="tab4_csv")
     
     is_csv_loaded = False
     curr_r, curr_g, curr_b = 200, 200, 200
